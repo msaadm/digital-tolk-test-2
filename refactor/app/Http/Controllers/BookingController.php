@@ -35,13 +35,15 @@ class BookingController extends Controller
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
+        // Define response with default value
+        $response = null;
 
+        // Move Assignment out of if condition
+        $user_id = $request->get('user_id');
+        if (!empty($user_id)) {
             $response = $this->repository->getUsersJobs($user_id);
-
-        }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
-        {
+        } elseif ($request->__authenticatedUser->user_type === env('ADMIN_ROLE_ID') // Should use === instead of ==
+            || $request->__authenticatedUser->user_type === env('SUPERADMIN_ROLE_ID')) {
             $response = $this->repository->getAll($request);
         }
 
@@ -80,9 +82,11 @@ class BookingController extends Controller
      */
     public function update($id, Request $request)
     {
-        $data = $request->all();
-        $cuser = $request->__authenticatedUser;
-        $response = $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser);
+        $data = array_except($request->all(), ['_token', 'submit']); // move this out of updateJob call
+
+        $user = $request->__authenticatedUser; // Rename variable
+
+        $response = $this->repository->updateJob($id, $data, $user);
 
         return response($response);
     }
@@ -93,7 +97,7 @@ class BookingController extends Controller
      */
     public function immediateJobEmail(Request $request)
     {
-        $adminSenderEmail = config('app.adminemail');
+        // Removed unused variable
         $data = $request->all();
 
         $response = $this->repository->storeJobEmail($data);
@@ -107,8 +111,9 @@ class BookingController extends Controller
      */
     public function getHistory(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
+        // Move Assignment out of if condition
+        $user_id = $request->get('user_id');
+        if (!empty($user_id)) {
             $response = $this->repository->getUsersJobsHistory($user_id, $request);
             return response($response);
         }
@@ -184,7 +189,7 @@ class BookingController extends Controller
      */
     public function getPotentialJobs(Request $request)
     {
-        $data = $request->all();
+        // Removed unused variable
         $user = $request->__authenticatedUser;
 
         $response = $this->repository->getPotentialJobs($user);
@@ -196,62 +201,36 @@ class BookingController extends Controller
     {
         $data = $request->all();
 
-        if (isset($data['distance']) && $data['distance'] != "") {
-            $distance = $data['distance'];
-        } else {
-            $distance = "";
-        }
-        if (isset($data['time']) && $data['time'] != "") {
-            $time = $data['time'];
-        } else {
-            $time = "";
-        }
-        if (isset($data['jobid']) && $data['jobid'] != "") {
-            $jobid = $data['jobid'];
-        }
-
-        if (isset($data['session_time']) && $data['session_time'] != "") {
-            $session = $data['session_time'];
-        } else {
-            $session = "";
-        }
-
-        if ($data['flagged'] == 'true') {
-            if($data['admincomment'] == '') return "Please, add comment";
+        // Move it to top, so return early if condition true
+        if ($data['flagged'] === true) { // use ===
+            if ($data['admincomment'] === '') { // use ===
+                return "Please, add comment";
+            }
             $flagged = 'yes';
         } else {
             $flagged = 'no';
         }
-        
-        if ($data['manually_handled'] == 'true') {
-            $manually_handled = 'yes';
-        } else {
-            $manually_handled = 'no';
-        }
 
-        if ($data['by_admin'] == 'true') {
-            $by_admin = 'yes';
-        } else {
-            $by_admin = 'no';
-        }
+        // simplify if to ternary and use ===/!==
+        $distance = isset($data['distance']) && $data['distance'] !== "" ? $data['distance'] : "";
+        $time = isset($data['time']) && $data['time'] !== "" ? $data['time'] : "";
+        $job_id = isset($data['jobid']) && $data['jobid'] !== "" ? $data['jobid'] : "";
+        $session = isset($data['session_time']) && $data['session_time'] !== "" ? $data['session_time'] : "";
+        $manually_handled = $data['manually_handled'] === true ? 'yes' : 'no';
+        $by_admin = $data['by_admin'] === true ? 'yes' : 'no';
+        $admin_comment = isset($data['admincomment']) && $data['admincomment'] !== "" ? $data['admincomment'] : "";
 
-        if (isset($data['admincomment']) && $data['admincomment'] != "") {
-            $admincomment = $data['admincomment'];
-        } else {
-            $admincomment = "";
-        }
         if ($time || $distance) {
-
-            $affectedRows = Distance::where('job_id', '=', $jobid)->update(array('distance' => $distance, 'time' => $time));
+            $affectedRows = Distance::where('job_id', '=', $job_id)->update(array('distance' => $distance, 'time' => $time));
         }
 
-        if ($admincomment || $session || $flagged || $manually_handled || $by_admin) {
-
-            $affectedRows1 = Job::where('id', '=', $jobid)->update(array('admin_comments' => $admincomment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin));
-
+        if ($admin_comment || $session || $flagged || $manually_handled || $by_admin) {
+            $affectedRows1 = Job::where('id', '=', $job_id)->update(array('admin_comments' => $admin_comment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin));
         }
 
-        return response('Record updated!');
+        $response = $affectedRows || $affectedRows1 ? 'Record updated!' : 'No change'; // return appropriate response
+
+        return response($response);
     }
 
     public function reopen(Request $request)
@@ -281,13 +260,18 @@ class BookingController extends Controller
     {
         $data = $request->all();
         $job = $this->repository->find($data['jobid']);
-        $job_data = $this->repository->jobToData($job);
+        // Removed unused call
 
         try {
-            $this->repository->sendSMSNotificationToTranslator($job);
-            return response(['success' => 'SMS sent']);
+            // check first if $job exist
+            if ($job) {
+                $this->repository->sendSMSNotificationToTranslator($job);
+                return response(['success' => 'SMS sent']);
+            } else {
+                return response(['failed' => 'Job not found']);
+            }
         } catch (\Exception $e) {
-            return response(['success' => $e->getMessage()]);
+            return response(['error' => $e->getMessage()]); // change key to error
         }
     }
 
